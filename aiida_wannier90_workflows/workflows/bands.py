@@ -13,7 +13,6 @@ from aiida_quantumespresso.workflows.pw.base import PwBaseWorkChain
 from aiida_quantumespresso.calculations.functions.create_kpoints_from_distance import create_kpoints_from_distance
 
 from aiida_wannier90_workflows.workflows.wannier import Wannier90WorkChain
-from aiida_wannier90_workflows.workflows.opengrid import Wannier90OpengridWorkChain
 from aiida_wannier90_workflows.utils.upf import get_number_of_electrons, get_number_of_projections, get_wannier_number_of_bands, _load_pseudo_metadata
 from aiida_wannier90_workflows.calculations.functions.kmesh import convert_kpoints_mesh_to_list
 
@@ -64,6 +63,8 @@ class Wannier90BandsWorkChain(WorkChain):
             help='If True plot Wannier functions as xsf files.')
         spec.input('bands_kpoints_distance', valid_type=orm.Float, required=False,
             help='Kpoint mesh density of the resulting band structure.')
+        spec.input('other_options', valid_type=orm.Dict, required=False,
+                   help='Additional options (e.g. exclude_bands, nscf_grid, reduce_number_wfs, nscf_nbnd_factor, num_iter_wannier)')
 
         spec.output('primitive_structure', valid_type=orm.StructureData,
             help='The normalized and primitivized structure for which the calculations are computed.')
@@ -211,6 +212,17 @@ class Wannier90BandsWorkChain(WorkChain):
         # 2. setting nscf number of bands when opengrid is used & opengrid has nscf step
         # 3. setting scf number of bands when opengrid is used & opengrid only has scf step
         self.ctx.nscf_nbnd = get_wannier_number_of_bands(**args)
+        nscf_nbnd_factor = 1.
+        if 'other_options' in self.inputs:
+            nscf_nbnd_factor = self.inputs.other_options.get_dict().get('nscf_nbnd_factor', 1)
+        self.ctx.nscf_nbnd *= nscf_nbnd_factor
+        self.ctx.nscf_nbnd = int(self.ctx.nscf_nbnd)
+
+        factor_string = ""
+        if nscf_nbnd_factor != 1.:
+            factor_string = " (with an additional factor {}x)".format(nscf_nbnd_factor)
+        self.report("Using {} bands in the NSCF{}".format(self.ctx.nscf_nbnd, factor_string))
+
 
         self.setup_scf_parameters()
         self.setup_nscf_parameters()
@@ -326,8 +338,17 @@ class Wannier90BandsWorkChain(WorkChain):
             num_wann = parameters['num_bands']
         else:
             num_wann = self.ctx.number_of_projections
+
+        # By default, do not reduce the # of WFs
+        reduce_number_wfs = 0
+        if 'other_options' in self.inputs:
+            reduce_number_wfs = self.inputs.other_options.get_dict().get('reduce_number_wfs', 0)
+        num_wann -= reduce_number_wfs
         parameters['num_wann'] = num_wann
-        self.report(f'number of Wannier functions set as {num_wann}')
+        reduce_string = ''
+        if reduce_number_wfs != 0:
+            reduce_string = f' (reduced by {reduce_number_wfs})'
+        self.report(f'number of Wannier functions set as {num_wann}{reduce_string}')
 
         if self.inputs.auto_projections:
             parameters['auto_projections'] = True
@@ -348,8 +369,11 @@ class Wannier90BandsWorkChain(WorkChain):
 
         number_of_atoms = len(self.ctx.current_structure.sites)
         if self.inputs.maximal_localisation:
+            num_iter = 400
+            if 'other_options' in self.inputs:
+                num_iter = self.inputs.other_options.get_dict().get('num_iter_wannier', 400)
             parameters.update({
-                'num_iter': 400,
+                'num_iter': num_iter,
                 'conv_tol': 1e-7 * number_of_atoms,
                 'conv_window': 3,
             })
@@ -374,6 +398,16 @@ class Wannier90BandsWorkChain(WorkChain):
             parameters['write_tb'] = True
             parameters['write_hr'] = True
             parameters['write_xyz'] = True
+
+        if 'other_options' in self.inputs:
+            other_options = self.inputs.other_options.get_dict()
+            try:
+                parameters['exclude_bands'] = other_options['exclude_bands']
+                num_exclude_bands = len(parameters['exclude_bands'])
+                parameters['num_wann'] -= num_exclude_bands
+                parameters['num_bands'] -= num_exclude_bands
+            except KeyError:
+                pass
 
         wannier90_parameters = orm.Dict(dict=parameters)
         self.ctx.wannier90_parameters = wannier90_parameters
@@ -412,7 +446,19 @@ class Wannier90BandsWorkChain(WorkChain):
             'metadata': {'call_link_label': 'create_kpoints_from_distance'}
         }
         # store it for wannier90 kpoints
-        self.ctx.nscf_kpoints = create_kpoints_from_distance(**args)
+
+        manual_nscf_grid = None
+        if 'other_options' in self.inputs:
+            other_options = self.inputs.other_options.get_dict()
+            manual_nscf_grid = other_options.get('nscf_grid', None)
+
+        if manual_nscf_grid is None:
+            self.ctx.nscf_kpoints = create_kpoints_from_distance(**args)
+        else:
+            kpts = orm.KpointsData()
+            kpts.set_kpoints_mesh(manual_nscf_grid)
+            self.ctx.nscf_kpoints = kpts
+
         if self.inputs.use_opengrid:
             # set a kmesh, nscf will use symmetry and reduce it to IBZ
             inputs.kpoints = self.ctx.nscf_kpoints
@@ -437,6 +483,7 @@ class Wannier90BandsWorkChain(WorkChain):
             'code': self.inputs.codes.projwfc,
             'parameters': self.ctx.projwfc_parameters,
             'metadata': {},
+            'settings': orm.Dict(dict={'cmdline': ['-ndiag', '16']})
         })
         inputs.metadata.options = self.ctx.options
         return inputs
@@ -447,7 +494,10 @@ class Wannier90BandsWorkChain(WorkChain):
             'parameters': self.ctx.pw2wannier90_parameters,
             'metadata': {},
         })
-        inputs.metadata.options = self.ctx.options
+        import copy
+        inputs.metadata.options = copy.deepcopy(self.ctx.options)
+        # Custom!
+        inputs.metadata.options['resources'] = {'num_machines': 9, 'num_mpiprocs_per_machine': 4}
         return inputs
 
     def prepare_wannier90_inputs(self):
@@ -511,6 +561,7 @@ class Wannier90BandsWorkChain(WorkChain):
         inputs.metadata = {'call_link_label': 'wannier'}
 
         if self.inputs.use_opengrid:
+            from aiida_wannier90_workflows.workflows.opengrid import Wannier90OpengridWorkChain
             inputs['opengrid'] = {'code': self.inputs.codes.opengrid}
             inputs['opengrid_only_scf'] = self.inputs.opengrid_only_scf
             running = self.submit(Wannier90OpengridWorkChain, **inputs)

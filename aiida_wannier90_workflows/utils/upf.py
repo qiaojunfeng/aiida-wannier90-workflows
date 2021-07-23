@@ -215,9 +215,9 @@ def parse_number_of_pswfc_soc(upf_content: str) -> int:
                 continue
             jchi = float(child.get('jchi'))
             lchi = float(child.get('lchi'))
-            oc = float(child.get('oc'))
-            if oc < 0:
-                continue
+            #oc = float(child.get('oc'))
+            #if oc < 0:
+            #    continue
             num_projections += 2 * lchi
             if abs(jchi - lchi - 0.5) < 1e-6:
                 num_projections += 2
