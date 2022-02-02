@@ -157,7 +157,7 @@ def get_wannier_workchain_fermi_energy(workchain: ty.Union[Wannier90BaseWorkChai
     else:
         if workchain.process_class == Wannier90BaseWorkChain:
             w90calc = get_last_calcjob(workchain)
-        elif workchain.process_class == Wannier90BandsWorkChain:
+        elif workchain.process_class in (Wannier90BandsWorkChain, Wannier90OptimizeWorkChain):
             w90calc = get_last_calcjob(workchain.get_outgoing(link_label_filter='wannier90').one().node)
         else:
             raise ValueError('Cannot find fermi energy')
@@ -186,6 +186,8 @@ def get_mapping_for_group(
     value. If not found the value is ``None``.
     :rtype: dict
     """
+    from aiida_quantumespresso.workflows.pw.bands import PwBandsWorkChain
+
     if isinstance(wan_group, str):
         wan_group = orm.load_group(wan_group)
     if isinstance(dft_group, str):
@@ -199,10 +201,15 @@ def get_mapping_for_group(
         print(f'Wannier group<{wan_group.pk}> is empty')
         return None
 
-    if 'structure' in dft_group.nodes[0].inputs:
-        dft_structures = {_.inputs.structure: _ for _ in dft_group.nodes}
-    elif 'structure' in dft_group.nodes[0].inputs['pw']:
-        dft_structures = {_.inputs.pw.structure: _ for _ in dft_group.nodes}
+    # PwBandsWorkChain calls seekpath, I need to use seekpath reduced structure
+    if dft_group.nodes[0].process_class == PwBandsWorkChain:
+        dft_structures = {_.outputs.primitive_structure: _ for _ in dft_group.nodes}
+    else:
+        # Just check the input structure
+        if 'structure' in dft_group.nodes[0].inputs:
+            dft_structures = {_.inputs.structure: _ for _ in dft_group.nodes}
+        elif 'structure' in dft_group.nodes[0].inputs['pw']:
+            dft_structures = {_.inputs.pw.structure: _ for _ in dft_group.nodes}
     if match_by_formula:
         dft_structures = {k.get_formula(): v for k, v in dft_structures.items()}
     # print(f'Found DFT calculations: {dft_structures}')

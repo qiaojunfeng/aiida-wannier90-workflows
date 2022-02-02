@@ -234,8 +234,12 @@ class Wannier90OptimizeWorkChain(Wannier90BandsWorkChain):
             if self.ctx.workchain_wannier90_bandsdist <= threshold:
                 # Stop if the initial bands distance is already good enough
                 self.ctx.optimize_minmax_new = []
-            elif len(self.ctx.optimize_bandsdist) > 0 and np.min(self.ctx.optimize_bandsdist) <= threshold:
-                self.ctx.optimize_minmax_new = []
+            else:
+                # Replace `None` by a huge number to avoid np.min error:
+                # TypeError: '<=' not supported between instances of 'float' and 'NoneType'
+                opt_dist = [_ if _ else 1e5 for _ in self.ctx.optimize_bandsdist]
+                if len(opt_dist) > 0 and np.min(opt_dist) <= threshold:
+                    self.ctx.optimize_minmax_new = []
         elif 'optimize_spreads_imbalence_threshold' in self.inputs:
             threshold = self.inputs['optimize_spreads_imbalence_threshold']
             if self.ctx.workchain_wannier90_spreads_imbalence <= threshold:
@@ -465,6 +469,8 @@ class Wannier90OptimizeWorkChain(Wannier90BandsWorkChain):
             inputs[key] = last_calc.inputs[key]
 
         inputs['remote_input_folder'] = self.ctx.current_folder
+        #inputs['remote_input_folder'] = self.ctx.workchain_pw2wannier90.outputs.remote_folder
+
 
         # Restore stash files
         if stash:

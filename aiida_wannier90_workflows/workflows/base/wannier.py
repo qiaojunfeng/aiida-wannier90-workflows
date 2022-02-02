@@ -49,6 +49,11 @@ class Wannier90BaseWorkChain(BaseRestartWorkChain):
         spec.exit_code(400, 'ERROR_BVECTORS', message='Unrecoverable bvectors error.')
         spec.exit_code(401, 'ERROR_DISENTANGLEMENT_NOT_ENOUGH_STATES', message='Unrecoverable disentanglement error.')
         spec.exit_code(402, 'ERROR_PLOT_WF_CUBE', message='Unrecoverable cube format error.')
+        spec.exit_code(
+            404,
+            'ERROR_OUTPUT_STDOUT_INCOMPLETE',
+            message='The stdout output file was incomplete probably because the calculation got interrupted.'
+        )
 
     def setup(self):
         """Call the `setup` of the `BaseRestartWorkChain` and then create the inputs dictionary in `self.ctx.inputs`.

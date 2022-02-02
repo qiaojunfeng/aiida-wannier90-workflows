@@ -51,15 +51,19 @@ def bands_distance_raw(
     # Check that the number of kpoints is the same
     assert dft_bands_filtered.shape[0] == wannier_bands.shape[
         0], f'Different number of kpoints {dft_bands_filtered.shape[0]} {wannier_bands.shape[0]}'
-    assert dft_bands_filtered.shape[1] >= wannier_bands.shape[
-        1], f'Too few DFT bands w.r.t. Wannier {dft_bands_filtered.shape[1]} {wannier_bands.shape[1]}'
+    # assert dft_bands_filtered.shape[1] >= wannier_bands.shape[
+    #     1], f'Too few DFT bands w.r.t. Wannier {dft_bands_filtered.shape[1]} {wannier_bands.shape[1]}'
+    if dft_bands_filtered.shape[1] <= wannier_bands.shape[1]:
+        wannier_bands_filtered = wannier_bands[:, :dft_bands_filtered.shape[1]]
+    else:
+        wannier_bands_filtered = wannier_bands
 
-    dft_bands_to_compare = dft_bands_filtered[:, :wannier_bands.shape[1]]
+    dft_bands_to_compare = dft_bands_filtered[:, :wannier_bands_filtered.shape[1]]
 
-    bands_energy_difference = (dft_bands_to_compare - wannier_bands)
+    bands_energy_difference = (dft_bands_to_compare - wannier_bands_filtered)
     bands_weight_dft = fermi_dirac(dft_bands_to_compare, mu,
                                    sigma) * compute_lower_cutoff(dft_bands_to_compare, lower_cutoff)
-    bands_weight_wannier = fermi_dirac(wannier_bands, mu,
+    bands_weight_wannier = fermi_dirac(wannier_bands_filtered, mu,
                                        sigma) * compute_lower_cutoff(dft_bands_to_compare, lower_cutoff)
     bands_weight = np.sqrt(bands_weight_dft * bands_weight_wannier)
 
@@ -166,6 +170,7 @@ def bands_distance_for_group(  # pylint: disable=too-many-statements
     from aiida_quantumespresso.workflows.pw.bands import PwBandsWorkChain
     from aiida_wannier90.calculations import Wannier90Calculation
     from aiida_wannier90_workflows.workflows.bands import Wannier90BandsWorkChain
+    from aiida_wannier90_workflows.workflows.optimize import Wannier90OptimizeWorkChain
     from aiida_wannier90_workflows.utils.plot import get_mapping_for_group, get_wannier_workchain_fermi_energy
 
     if isinstance(wan_group, str):
@@ -173,7 +178,8 @@ def bands_distance_for_group(  # pylint: disable=too-many-statements
     if isinstance(dft_group, str):
         dft_group = orm.load_group(dft_group)
 
-    mapping = get_mapping_for_group(wan_group, dft_group, match_by_formula)
+    if wan_group.nodes[0].process_class != Wannier90OptimizeWorkChain:
+        mapping = get_mapping_for_group(wan_group, dft_group, match_by_formula)
 
     columns = [
         'formula',
@@ -196,8 +202,12 @@ def bands_distance_for_group(  # pylint: disable=too-many-statements
             print(f'! Skip unfinished {wan_wc.process_label}<{wan_wc.pk}> of {formula}')
             continue
 
-        bands_wc = mapping[wan_wc]
-        if bands_wc is None:
+        if wan_wc.process_class == Wannier90OptimizeWorkChain:
+            bands_wc = wan_wc.inputs.optimize_reference_bands.get_incoming(link_label_filter='band_structure').one().node
+        else:
+            bands_wc = mapping[wan_wc]
+
+        if bands_wc is None and wan_wc.process_class != Wannier90OptimizeWorkChain:
             msg = f'! Cannot find DFT bands for {wan_wc.process_label}<{wan_wc.pk}> of {formula}'
             print(msg)
             continue
@@ -219,9 +229,11 @@ def bands_distance_for_group(  # pylint: disable=too-many-statements
                 exclude_list_dft = wan_wc.inputs.parameters['exclude_bands']
             except KeyError:
                 exclude_list_dft = []
-        elif wan_wc.process_class == Wannier90BandsWorkChain:
+        elif wan_wc.process_class in (Wannier90BandsWorkChain, Wannier90OptimizeWorkChain):
             fermi_energy = get_wannier_workchain_fermi_energy(wan_wc)
-            bands_wannier_node = wan_wc.outputs.band_structure
+            bands_wannier_node = wan_wc.outputs.wannier90_optimal.interpolated_bands
+            if np.prod(bands_wannier_node.attributes['array|bands']) == 0:
+                bands_wannier_node = wan_wc.outputs.band_structure
             try:
                 last_wan = wan_wc.get_outgoing(link_label_filter='wannier90').one().node
                 if 'parameters' in last_wan.inputs:

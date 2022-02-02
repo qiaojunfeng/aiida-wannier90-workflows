@@ -103,20 +103,22 @@ def cmd_plot_bands(ctx, pw, wannier, save):
 @click.argument('pw', type=GroupParamType(), nargs=1)
 @click.argument('wannier', type=GroupParamType(), nargs=1)
 @click.option('-s', '--save', is_flag=True, default=False, help='Save bands distance as HDF5')
+@click.option('-m', '--match-by-structure', is_flag=True, default=False, help='Find PwBandsWorkChain by structure instead of structure formula')
 @decorators.with_dbenv()
-def cmd_plot_bandsdist(pw, wannier, save):
+def cmd_plot_bandsdist(pw, wannier, save, match_by_structure):
     """Plot bands distance for a group of PwBandsWorkChain and a group of Wannier90BandsWorkChain.
 
     PW is the PK of a group which contains PwBandsWorkChain,
     WANNIER is the PK of a group which contains Wannier90BandsWorkChain.
     """
-    from aiida_wannier90_workflows.utils.bandsdist import bands_distance_for_group, plot_distance, save_distance
+    from aiida_wannier90_workflows.utils.bandsdist import bands_distance_for_group, plot_distance, save_distance, standardize_groupname
 
-    df = bands_distance_for_group(wannier, pw, match_by_formula=True)
+    df = bands_distance_for_group(wannier, pw, match_by_formula=not match_by_structure)
     plot_distance(df)
 
     if save:
-        save_distance(df, save)
+        filename = f'bandsdist_{standardize_groupname(pw.label)}_{standardize_groupname(wannier.label)}.h5'
+        save_distance(df, filename)
 
 
 @cmd_plot.command('checkerboard')
