@@ -1,6 +1,6 @@
 Non-Commercial, End-User Software License Agreement for AiiDA-wannier90-workflows
 
-Copyright (c), 2017-2024, École polytechnique fédérale de Lausanne (Theory and
+Copyright (c), 2017-2024, École Polytechnique Fédérale de Lausanne (Theory and
 Simulation of Materials (THEOS) and National Centre for Computational Design
 and Discovery of Novel Materials (NCCR MARVEL)), Switzerland and Paul Scherrer
 Institut (Laboratory for Materials Simulations (LMS)), Switzerland. All rights
@@ -12,7 +12,7 @@ INTRODUCTION
   Authors and their Institutions (hereafter "LICENSORS") of the program
 "AiiDA-wannier90-workflows" (hereafter "PROGRAM"), will grant you (hereafter
 "LICENSEE") a fully-paid, non-exclusive, and non-transferable license for
-academic, non-commercial purposes only (hereafter “LICENSE”) to use the PROGRAM
+academic, non-commercial purposes only (hereafter "LICENSE") to use the PROGRAM
 computer software and associated documentation furnished hereunder.
 
 - LICENSEE acknowledges that the PROGRAM is a research tool still in the
@@ -80,8 +80,8 @@ LICENSEE agrees to preserve the same. LICENSEE agrees not to use any portion of
 the PROGRAM or of any IMPROVEMENTS in any machine-readable form outside the
 PROGRAM, nor to make any copies except for its internal use, without prior
 written consent of LICENSORS. LICENSEE agrees to place the following copyright
-notice on any such copies: © All rights reserved.  ECOLE POLYTECHNIQUE FEDERALE
-DE LAUSANNE, Switzerland, Laboratory of Theory and Simulation of Materials
+notice on any such copies: © All rights reserved. École Polytechnique Fédérale
+de Lausanne, Switzerland, Laboratory of Theory and Simulation of Materials
 (THEOS), 2024; Authors: Junfeng Qiao and Nicola Marzari. Paul Scherrer
 Institut, Switzerland, Laboratory for Materials Simulations (LMS), 2024;
 Authors: Giovanni Pizzi and Nicola Marzari.
