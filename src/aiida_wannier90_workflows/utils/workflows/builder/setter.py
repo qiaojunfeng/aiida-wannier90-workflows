@@ -720,3 +720,26 @@ def set_wannier_stash(
     ]
     settings["exclude_retrieve_list"] = exclude_retrieve_list
     builder["settings"] = orm.Dict(settings)
+
+
+def set_fortran_unformatted(builder: ProcessBuilder) -> None:
+    """Use unformatted files to save disk space.
+
+    For Wannier90OptimizeWorkChain or Wannier90BandsWorkChain.
+    These tags are only available in my custom branch of QE.
+    :param builder: _description_
+    :type builder: ProcessBuilder
+    """
+    params = builder.pw2wannier90["pw2wannier90"]["parameters"].get_dict()["inputpp"]
+    params["amn_formatted"] = False
+    params["mmn_formatted"] = False
+    params["eig_formatted"] = False
+    params["wvfn_formatted"] = False
+    builder.pw2wannier90["pw2wannier90"]["parameters"] = orm.Dict({"inputpp": params})
+
+    params = builder.wannier90["wannier90"]["parameters"].get_dict()
+    params["amn_formatted"] = False
+    params["mmn_formatted"] = False
+    params["eig_formatted"] = False
+    params["wvfn_formatted"] = False
+    builder.wannier90["wannier90"]["parameters"] = orm.Dict(params)
