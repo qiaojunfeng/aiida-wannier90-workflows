@@ -5,6 +5,7 @@ import typing as ty
 from aiida import orm
 
 from aiida_quantumespresso.calculations.pw import PwCalculation
+from aiida_quantumespresso.workflows.pw.bands import PwBandsWorkChain
 from aiida_quantumespresso.workflows.pw.base import PwBaseWorkChain
 
 
@@ -70,3 +71,34 @@ def get_fermi_energy_from_nscf(
             break
 
     return fermi_energy
+
+
+def get_structure_and_bands_kpoints(
+    workchain: PwBandsWorkChain,
+) -> ty.Tuple[orm.StructureData, orm.KpointsData]:
+    """Return the primitive structure and the explicit kpoint path of a PwBandsWorkChain.
+
+    Assuming the PwBandsWorkChain runs a seekpath internally.
+
+    :param workchain: a ``PwBandsWorkChain``
+    :type workchain: PwBandsWorkChain
+    :return: [description]
+    :rtype: ty.Tuple[orm.StructureData, orm.KpointsData]
+    """
+    from aiida.common.links import LinkType
+
+    # internal PwBaseWorkChain for pw.x bands calculation
+    bands_workchain = (
+        workchain.get_outgoing(
+            node_class=PwBaseWorkChain,
+            link_type=LinkType.CALL_WORK,
+            link_label_filter="bands",
+        )
+        .one()
+        .node
+    )
+
+    structure = bands_workchain.inputs.pw.structure
+    bands_kpoints = bands_workchain.inputs.kpoints
+
+    return structure, bands_kpoints
