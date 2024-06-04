@@ -26,6 +26,7 @@ from aiida_wannier90_workflows.workflows.base.pw2wannier90 import (
     Pw2wannier90BaseWorkChain,
 )
 from aiida_wannier90_workflows.workflows.base.wannier90 import Wannier90BaseWorkChain
+from aiida_wannier90_workflows.workflows.optimize import Wannier90OptimizeWorkChain
 from aiida_wannier90_workflows.workflows.projwfcbands import ProjwfcBandsWorkChain
 from aiida_wannier90_workflows.workflows.wannier90 import Wannier90WorkChain
 
@@ -543,3 +544,149 @@ def set_num_bands(
 
     elif process_class == PwBandsWorkChain:
         set_num_bands(builder["bands"], num_bands, process_class=PwBaseWorkChain)
+
+
+def set_scf_stash(
+    builder: ProcessBuilder,
+    stash_folder_path: str,
+) -> None:
+    """Stash the scf charge density.
+
+    :param builder: A ``PwCalculation`` builder
+    :type builder: ProcessBuilder
+    """
+    from copy import deepcopy
+
+    from aiida.common.datastructures import StashMode
+
+    source_list = [
+        "out/aiida.save/charge-density.dat",
+        "out/aiida.save/charge-density.hdf5",
+        "out/aiida.save/data-file-schema.xml",
+        "out/aiida.save/paw.txt",
+    ]
+
+    metadata = deepcopy(builder["metadata"])
+    metadata["options"]["stash"] = {
+        "source_list": source_list,
+        "target_base": stash_folder_path,
+        "stash_mode": StashMode.COPY.value,
+    }
+    builder["metadata"] = metadata
+
+
+def set_wannier_stash(
+    builder: ProcessBuilder,
+    stash_folder_path: str,
+    compress: bool = False,
+    mmn: bool = False,
+    process_class: ty.Union[
+        Wannier90Calculation,
+        Wannier90BaseWorkChain,
+        Wannier90BandsWorkChain,
+        Wannier90OptimizeWorkChain,
+    ] = Wannier90OptimizeWorkChain,
+) -> None:
+    """Stash the Wannier Hamiltonian and cube files.
+
+    :param builder: [description]
+    :type builder: ProcessBuilder
+    :param mmn: stash also amn/mmn/eig/chk files
+    :type mmn: bool
+    :return: [description]
+    :rtype: ProcessBuilder
+    """
+    from copy import deepcopy
+
+    from aiida.common.datastructures import StashMode
+
+    if process_class in [Wannier90BandsWorkChain, Wannier90OptimizeWorkChain]:
+        set_wannier_stash(
+            builder["wannier90"],
+            stash_folder_path,
+            compress,
+            process_class=Wannier90BaseWorkChain,
+        )
+        return
+    if process_class == Wannier90BaseWorkChain:
+        set_wannier_stash(
+            builder["wannier90"],
+            stash_folder_path,
+            compress,
+            process_class=Wannier90Calculation,
+        )
+        return
+
+    # For storing wannier Hamiltonian
+    if compress:
+        # I use the following bash script to compress the files,
+        # set these lines as `append_text` for wannier90 `code`,
+        # i.e. after `srun -n ...`
+        # if also store amn/mmn/eig/chk, change the `all_files`.
+        #
+        # retVal=$?
+        # if [ $retVal -ne 0 ]; then
+        #   exit $retVal
+        # fi
+        #
+        # PATH=/TODO_change_path/p7zip/bin:$PATH
+        #
+        # # bash will auto expand '*'
+        # all_files=( 'aiida_tb.dat' 'aiida_wsvec.dat' 'aiida_*.cube' )
+        # #all_files=( 'aiida_tb.dat' 'aiida_wsvec.dat' 'aiida_*.cube' 'aiida.amn' 'aiida.mmn' 'aiida.eig' 'aiida.chk' )
+        # existed_files=()
+        #
+        # for f in ${all_files[@]}; do
+        #   if test -f "$f"; then
+        #     existed_files+=( "$f" )
+        #   fi
+        # done
+        #
+        # if ((${#existed_files[@]})); then
+        #   # if not empty
+        #   # use -l to follow symlinks, e.g., amn/mmn/eig
+        #   7za -l a wan_tb_cube.7z "${existed_files[@]}"
+        # fi
+        source_list = [
+            "wan_tb_cube.7z",
+        ]
+    else:
+        source_list = [
+            "aiida_hr.dat",
+            "aiida_r.dat",
+            "aiida_centres.xyz",
+            "aiida_tb.dat",
+            "aiida_wsvec.dat",
+            "aiida_*.xsf",
+            "aiida_*.cube",
+        ]
+        if mmn:
+            source_list += [
+                "aiida.amn",
+                "aiida.mmn",
+                "aiida.eig",
+                "aiida.chk",
+            ]
+
+    metadata = deepcopy(builder["metadata"])
+    options = metadata.get("options", {})
+    options["stash"] = {
+        "source_list": source_list,
+        "target_base": stash_folder_path,
+        "stash_mode": StashMode.COPY.value,
+    }
+    metadata["options"] = options
+    builder["metadata"] = metadata
+
+    # Do not retrieve aiida_tb.dat, aiida_wsvec.dat since they are stashed
+    # These are set in the settings of Wannier90Calculation
+    if "settings" in builder:
+        settings = builder["settings"].get_dict()
+    else:
+        settings = {}
+    exclude_retrieve_list = settings.get("exclude_retrieve_list", [])
+    exclude_retrieve_list += [
+        f"aiida{_}" for _ in ("_*.xsf", "_*.cube", "_tb.dat", "_wsvec.dat")
+    ]
+    settings["exclude_retrieve_list"] = exclude_retrieve_list
+    builder["settings"] = orm.Dict(settings)
