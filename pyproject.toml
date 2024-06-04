@@ -75,6 +75,7 @@ analysis = ["pandas", "tables", "scikit-learn"]
 "aiida-wannier90-workflows" = "aiida_wannier90_workflows.cli:cmd_root"
 
 [project.entry-points."aiida.calculations"]
+"wannier90_workflows.stash_to_remote" = "aiida_wannier90_workflows.calculations.stash_to_remote:stash_to_remote"
 "wannier90_workflows.split" = "aiida_wannier90_workflows.calculations.split:Wannier90SplitCalculation"
 
 [project.entry-points."aiida.parsers"]
