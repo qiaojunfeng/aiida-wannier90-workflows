@@ -44,11 +44,15 @@ def set_parallelization(
         Wannier90BandsWorkChain,
         CalcJob,
     ] = Wannier90BandsWorkChain,
+    hyperqueue: bool = False,
 ) -> None:
     """Set parallelization for Wannier90BandsWorkChain.
 
     :param builder: a builder or its subport, or a ``AttributeDict`` which is the inputs for the builder.
     :type builder: ProcessBuilderNamespace
+    :param hyperqueue: whether to use hyperqueue, if true, set `num_cores` instead of
+        `num_mpiprocs_per_machine`, and `num_machines` is always 1.
+    :type hyperqueue: bool
     """
     # pylint: disable=too-many-branches,too-many-statements,too-many-locals
     default_max_wallclock_seconds = 12 * 3600
@@ -85,6 +89,10 @@ def set_parallelization(
         "account",
         default_account,
     )
+    if hyperqueue:
+        num_cores = num_mpiprocs_per_machine
+        num_mpiprocs_per_machine = None
+        num_machines = 1
 
     # I need to prune the builder, otherwise e.g. initially builder.relax is
     # an empty dict but the following code will change it to non-empty,
@@ -101,6 +109,8 @@ def set_parallelization(
         queue_name=queue_name,
         account=account,
     )
+    if hyperqueue:
+        metadata["options"]["resources"]["num_cores"] = num_cores
     settings = get_settings_for_kpool(npool=npool)
 
     # PwCalculation is a subclass of BasePwCpInputGenerator,
@@ -121,6 +131,7 @@ def set_parallelization(
             builder["pw"],
             parallelization=parallelization,
             process_class=BasePwCpInputGenerator,
+            hyperqueue=hyperqueue,
         )
 
     # Includes PwCalculation, OpenGridCalculation, ProjwfcCalculation
@@ -136,6 +147,7 @@ def set_parallelization(
             builder["open_grid"],
             parallelization=parallelization,
             process_class=NamelistsCalculation,
+            hyperqueue=hyperqueue,
         )
         # For now open_grid.x has memory issue, I run it with less cores
         # open_grid_metadata = copy.deepcopy(metadata)
@@ -147,6 +159,7 @@ def set_parallelization(
             builder["projwfc"],
             parallelization=parallelization,
             process_class=NamelistsCalculation,
+            hyperqueue=hyperqueue,
         )
 
     elif process_class == Pw2wannier90BaseWorkChain:
@@ -154,6 +167,7 @@ def set_parallelization(
             builder["pw2wannier90"],
             parallelization=parallelization,
             process_class=NamelistsCalculation,
+            hyperqueue=hyperqueue,
         )
 
     elif process_class == Wannier90Calculation:
@@ -164,6 +178,7 @@ def set_parallelization(
             builder["wannier90"],
             parallelization=parallelization,
             process_class=Wannier90Calculation,
+            hyperqueue=hyperqueue,
         )
 
     elif process_class == PwRelaxWorkChain:
@@ -172,12 +187,14 @@ def set_parallelization(
                 builder["base"],
                 parallelization=parallelization,
                 process_class=PwBaseWorkChain,
+                hyperqueue=hyperqueue,
             )
         if "base_final_scf" in pruned_builder:
             set_parallelization(
                 builder["base_final_scf"],
                 parallelization=parallelization,
                 process_class=PwBaseWorkChain,
+                hyperqueue=hyperqueue,
             )
 
     elif process_class == PwBandsWorkChain:
@@ -186,6 +203,7 @@ def set_parallelization(
                 builder["relax"],
                 parallelization=parallelization,
                 process_class=PwRelaxWorkChain,
+                hyperqueue=hyperqueue,
             )
 
         if "scf" in pruned_builder:
@@ -193,6 +211,7 @@ def set_parallelization(
                 builder["scf"],
                 parallelization=parallelization,
                 process_class=PwBaseWorkChain,
+                hyperqueue=hyperqueue,
             )
 
         if "bands" in pruned_builder:
@@ -200,6 +219,7 @@ def set_parallelization(
                 builder["bands"],
                 parallelization=parallelization,
                 process_class=PwBaseWorkChain,
+                hyperqueue=hyperqueue,
             )
 
     elif process_class == ProjwfcBandsWorkChain:
@@ -208,6 +228,7 @@ def set_parallelization(
                 builder["relax"],
                 parallelization=parallelization,
                 process_class=PwRelaxWorkChain,
+                hyperqueue=hyperqueue,
             )
 
         if "scf" in pruned_builder:
@@ -215,6 +236,7 @@ def set_parallelization(
                 builder["scf"],
                 parallelization=parallelization,
                 process_class=PwBaseWorkChain,
+                hyperqueue=hyperqueue,
             )
 
         if "bands" in pruned_builder:
@@ -222,6 +244,7 @@ def set_parallelization(
                 builder["bands"],
                 parallelization=parallelization,
                 process_class=PwBaseWorkChain,
+                hyperqueue=hyperqueue,
             )
 
         if "projwfc" in pruned_builder:
@@ -229,6 +252,7 @@ def set_parallelization(
                 builder["projwfc"],
                 parallelization=parallelization,
                 process_class=ProjwfcBaseWorkChain,
+                hyperqueue=hyperqueue,
             )
 
     elif process_class == Wannier90BandsWorkChain:
@@ -237,6 +261,7 @@ def set_parallelization(
                 builder["scf"],
                 parallelization=parallelization,
                 process_class=PwBaseWorkChain,
+                hyperqueue=hyperqueue,
             )
 
         if "nscf" in pruned_builder:
@@ -244,6 +269,7 @@ def set_parallelization(
                 builder["nscf"],
                 parallelization=parallelization,
                 process_class=PwBaseWorkChain,
+                hyperqueue=hyperqueue,
             )
 
         if "open_grid" in pruned_builder:
@@ -251,6 +277,7 @@ def set_parallelization(
                 builder["open_grid"],
                 parallelization=parallelization,
                 process_class=OpenGridBaseWorkChain,
+                hyperqueue=hyperqueue,
             )
 
         if "projwfc" in pruned_builder:
@@ -258,6 +285,7 @@ def set_parallelization(
                 builder["projwfc"],
                 parallelization=parallelization,
                 process_class=ProjwfcBaseWorkChain,
+                hyperqueue=hyperqueue,
             )
 
         if "pw2wannier90" in pruned_builder:
@@ -265,6 +293,7 @@ def set_parallelization(
                 builder["pw2wannier90"],
                 parallelization=parallelization,
                 process_class=Pw2wannier90BaseWorkChain,
+                hyperqueue=hyperqueue,
             )
 
         if "wannier90" in pruned_builder:
@@ -272,6 +301,7 @@ def set_parallelization(
                 builder["wannier90"],
                 parallelization=parallelization,
                 process_class=Wannier90BaseWorkChain,
+                hyperqueue=hyperqueue,
             )
 
 
