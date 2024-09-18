@@ -2,6 +2,7 @@
 
 import json
 import os
+from pathlib import Path
 import typing as ty
 import xml.sax
 
@@ -48,7 +49,8 @@ class PSHandler(xml.sax.ContentHandler):
         self.pblock.extend(list(range(113, 119)))
         # in p-block ns, np are planewaves and n-1d are semicores
         # otherwise ns, np and n-1d are pws, n-1s n-1p are semicores
-        self.readWFC = False
+        # self.readWFC = False
+        self.readWFC = True
         self.pswfcs = []
         self.pswfcs_shell = []
         self.semicores = []
@@ -65,27 +67,34 @@ class PSHandler(xml.sax.ContentHandler):
         and 2 for F orbitals. If not in P block, S and P weight is 0.
         This will later be used to identify semicores.
         """
+        import ase
 
-        if name == "PP_MESH":
-            try:
-                self.znum = int(float(attrs["zmesh"]))
-            except ValueError:
-                print(f"z = {attrs['zmesh']} is not acceptable")
+        # not every UPF contains zmesh, e.g. dojo.
+        # if name == "PP_MESH":
+        #     try:
+        #         self.znum = int(float(attrs["zmesh"]))
+        #     except ValueError:
+        #         print(f"z = {attrs['zmesh']} is not acceptable")
+        if name == "PP_HEADER":
+            self.znum = ase.data.atomic_numbers[attrs["element"].strip()]
 
-        if name == "PP_SPIN_ORB":
-            # <PP_SPIN_ORB>
-            #   <PP_RELWFC.1 index="1" els="5S" nn="1" lchi="0" jchi="0.500000000000000" oc="2.00000000000000"/>
-            #   <PP_RELWFC.2 index="2" els="6S" nn="2" lchi="0" jchi="0.500000000000000" oc="1.00000000000000"/>
-            #   ...
-            #   <PP_RELBETA.1 index="1" lll="0" jjj="0.500000000000000"/>
-            #   <PP_RELBETA.2 index="2" lll="0" jjj="0.500000000000000"/>
-            #   <PP_RELBETA.3 index="3" lll="0" jjj="0.500000000000000"/>
-            #   ...
-            # </PP_SPIN_ORB>
+        # if name == "PP_SPIN_ORB":
+        #     # <PP_SPIN_ORB>
+        #     #   <PP_RELWFC.1 index="1" els="5S" nn="1" lchi="0" jchi="0.500000000000000" oc="2.00000000000000"/>
+        #     #   <PP_RELWFC.2 index="2" els="6S" nn="2" lchi="0" jchi="0.500000000000000" oc="1.00000000000000"/>
+        #     #   ...
+        #     #   <PP_RELBETA.1 index="1" lll="0" jjj="0.500000000000000"/>
+        #     #   <PP_RELBETA.2 index="2" lll="0" jjj="0.500000000000000"/>
+        #     #   <PP_RELBETA.3 index="3" lll="0" jjj="0.500000000000000"/>
+        #     #   ...
+        #     # </PP_SPIN_ORB>
 
-            self.readWFC = True
-        if "PP_RELWFC" in name and self.readWFC:
-            orb = attrs["els"]
+        #     self.readWFC = True
+
+        # if "PP_RELWFC" in name and self.readWFC:
+        #    orb = attrs["els"]
+        if "PP_CHI" in name and self.readWFC:
+            orb = attrs["label"]
             if not orb in self.pswfcs:
                 self.pswfcs.append(orb)
                 nn = int(orb[0])
@@ -344,6 +353,40 @@ def generate_dojo_metadata():
         json.dump(result, handle, indent=2)
 
 
+def generate_dojo_semicore():
+    """Scan the folder and generate a json file containing metainfo of pseudos of pslibrary.
+
+    :param dirname: folder to be scanned, if None download from QE website
+    :type dirname: str
+    """
+    import ase
+
+    from aiida import orm
+
+    group_label = "PseudoDojo/0.4/PBEsol/FR/standard/upf"
+    pseudos = orm.load_group(group_label)
+
+    result = {}
+
+    for pp in pseudos.nodes:
+        element = pp.element
+        # use xml.sax to parse upf file
+        handler = PSHandler()
+        xml.sax.parseString(pp.get_content(), handler)
+        result[element] = {
+            "filename": pp.filename,
+            "md5": pp.md5,
+            "pswfcs": handler.pswfcs,
+            "semicores": handler.semicores,
+        }
+
+    result = dict(sorted(result.items(), key=lambda k: ase.data.atomic_numbers[k[0]]))
+
+    path = Path(__file__).parent / "semicore" / f"{group_label.replace('/', '_')}.json"
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(result, handle, indent=2)
+
+
 def _print_exclude_semicore():
     """Print semicore."""
     periodic_table = "H He Li Be B C N O F Ne "
@@ -364,6 +407,8 @@ def _print_exclude_semicore():
         print(f"{kind:2s} {' '.join(remaining)}")
 
 
-# if __name__ == '__main__':
-#     generate_pslibrary_metadata()
-#     # generate_dojo_metadata()
+if __name__ == "__main__":
+    #     generate_pslibrary_metadata()
+    #     # generate_dojo_metadata()
+
+    generate_dojo_semicore()
